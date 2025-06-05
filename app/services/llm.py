@@ -56,24 +56,25 @@ class HuggingFaceChat(LLM):
 # ------------------ Prompt Template ------------------
 
 CUSTOM_PROMPT_TEMPLATE = """
-You are a helpful and responsible assistant.
+You are a responsible assistant trained to follow strict data access rules.
 
-Use only the information provided in the context below to answer the user's question.
-Start by identifying the user's role from the login system.
+Your job is to ONLY answer questions using the context provided below. However, before answering, you MUST check if the user's role matches the role of the documents.
 
 Context: {context}
 User Role: {role}
 Question: {question}
 
-Instructions:
-1. Only answer questions that relate to the user's own department ({role}) or general .
-2. If the user asks something related to another department, respond politely that they are not authorized to access that information.
-3. Never fabricate an answer. If the required data is not present in the context, respond with:
+Important Rules:
+1. If the documents in context belong to the same department as the user's role, answer the question truthfully based on the content.
+2. If the documents belong to a DIFFERENT department, you must respond:
+   "Access denied. You are not authorized to view information from another department."
+3. If you are unsure or the data is missing, say:
    "I'm sorry, I couldn't find relevant information in your department's records."
-4. Don't provide information outside of the context.
+4. Do not make up any information. Always stay within the given context.
 
-Begin your answer below:
+Begin your answer:
 """
+
 
 def set_custom_template():
     return PromptTemplate(
@@ -111,18 +112,29 @@ def load_qa_chain():
 
     # Step 2: Define how to fetch documents and use them in the pipeline
     def qa_with_retrieval(inputs):
-        docs = db.as_retriever(search_kwargs={"k": 2}).invoke(inputs["question"])
-        context = "\n\n".join(doc.page_content for doc in docs)
+        question = inputs["question"]
+        role = inputs["role"]
+
+        docs = db.as_retriever(search_kwargs={"k": 10}).invoke(question)
+
+        # ✅ Filter documents strictly by role
+        filtered_docs = [doc for doc in docs if doc.metadata.get("role") == role]
+
+        if not filtered_docs:
+            return {
+                "result": "Access denied or no relevant documents found for your department.",
+                "source_documents": []
+            }
+
+        context = "\n\n".join(doc.page_content for doc in filtered_docs)
 
         response = rag_pipeline.invoke({
             "context": context,
-            "question": inputs["question"],
-            "role": inputs["role"]
+            "question": question,
+            "role": role
         })
 
-        return {"result": response, "source_documents": docs}
-
-    return qa_with_retrieval
+        return {"result": response, "source_documents": filtered_docs}
 
 
 # ------------------ Exported Object ------------------
@@ -135,7 +147,7 @@ if __name__ == "__main__":
     print("🔍 Testing LLM Setup")
     try:
         qa_chain = load_qa_chain()
-        response = qa_chain({"question": "What is engineering in this company?", "role": "engineering"})
+        response = qa_chain({"question": "What is financing in this company?", "role": "engineering"})
         print(" Response:", response["result"])
         print(" Source:", response["source_documents"])
     except Exception as e:

@@ -83,4 +83,4 @@ async def chat_endpoint(chat_req: ChatRequest, request: Request):
 @app.post("/logout")
 def logout(response: Response):
     response.delete_cookie("session")
-    return JSONResponse(content={"message": "Logged out successfully."})
+    return JSONResponse(content={"message ": "Logged out successfully."})

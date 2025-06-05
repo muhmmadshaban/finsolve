@@ -10,5 +10,5 @@ wheels/
 .venv
 .idea/ 
 *.lock
-resources/vectorstore
+resources/vector_db_hf/
 .env

@@ -54,7 +54,7 @@ def chat(message):
             cookies={"session": st.session_state.session_cookie}
         )
         response.raise_for_status()
-        return response.json()["answer"]  # ✅ Simplified return structure
+        return response.json()["answer"]  
     except requests.exceptions.RequestException as e:
         st.error(f"Chat failed: {e}")
         return None

@@ -38,7 +38,8 @@ class HuggingFaceChat(LLM):
         try:
             response = self.client.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=100,
+                max_tokens=1024,
+                stop=stop,
                 temperature=0.5
             )
             return response.choices[0].message.content
@@ -103,7 +104,7 @@ def load_qa_chain():
         question = inputs["question"]
         role = inputs["role"]
 
-        docs = db.as_retriever(search_kwargs={"k": 10}).invoke(question)
+        docs = db.as_retriever().invoke(question)
 
         filtered_docs = [doc for doc in docs if doc.metadata.get("role") == role]
 

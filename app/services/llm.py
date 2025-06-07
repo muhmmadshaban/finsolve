@@ -40,7 +40,7 @@ class HuggingFaceChat(LLM):
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=1024,
                 stop=stop,
-                temperature=0.5
+                temperature=0.2
             )
             return response.choices[0].message.content
         except Exception as e:
@@ -83,6 +83,15 @@ def set_custom_template():
 
 from langchain_core.runnables import RunnableMap
 from langchain_core.runnables import RunnableSequence
+import re
+
+def is_greeting(question):
+    greetings = [
+        r"\bhi\b", r"\bhello\b", r"\bhey\b", r"\bhow are you\b",
+        r"\bgood morning\b", r"\bgood evening\b", r"\bwhat's up\b",
+        r"\bhowdy\b", r"\bgreetings\b", r"\byo\b"
+    ]
+    return any(re.search(pattern, question) for pattern in greetings)
 
 def load_qa_chain():
     embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
@@ -105,32 +114,30 @@ def load_qa_chain():
         question = inputs["question"].strip().lower()
         role = inputs["role"]
 
-        # 🌟 Friendly intent detection
-        greetings = ["hi", "hello", "hey", "how are you", "good morning", "good evening", "what's up"]
-
-        if any(greet in question for greet in greetings):
+        # ✅ Friendly and safe greeting detection
+        if is_greeting(question):
             return {
-                "result": "👋 Hello! I'm here to help you with department-related questions. Please let me know what you’d like to know today!",
+                "result": "👋 Hello! I'm here to help you with department-related questions. Ask me anything related to your department!",
                 "source_documents": []
             }
 
         # ✅ Department-based filtering
         retriever = db.as_retriever(search_kwargs={
             "k": 10,
-            "filter": {"role": role}
+            "filter": {"role": {"$in": [role, "general"]}}
         })
 
         try:
             docs = retriever.invoke(question)
         except Exception as e:
             return {
-                "result": f"Failed to retrieve documents: {e}",
+                "result": f"❌ Failed to retrieve documents: {e}",
                 "source_documents": []
             }
 
         if not docs:
             return {
-                "result": "Access denied or no relevant documents found for your department.",
+                "result": "I'm sorry, I couldn't find relevant information in your department's records.",
                 "source_documents": []
             }
 
@@ -144,12 +151,9 @@ def load_qa_chain():
 
         return {"result": response, "source_documents": docs}
 
-
-
-    return qa_with_retrieval  
-
-qa_chain = load_qa_chain()
+    return qa_with_retrieval
 # ----------- Testing -------------
+qa_chain= load_qa_chain()
 
 if __name__ == "__main__":
     print("🔍 Testing LLM Setup")

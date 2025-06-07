@@ -99,7 +99,7 @@ else:
             )
         
     with st.form(key="chat_form", clear_on_submit=True):
-        msg = st.text_input("Your message", key="input_msg")
+        msg = st.text_area("Your message", key="input_msg", height=100)
         send_button = st.form_submit_button("Send")
         if msg.lower() == "clear":
             st.session_state.chat_history = []

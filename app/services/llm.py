@@ -53,24 +53,25 @@ class HuggingFaceChat(LLM):
 # ------------------ Prompt Template ------------------
 
 CUSTOM_PROMPT_TEMPLATE = """
-You are a responsible assistant trained to follow strict data access rules.
+Hello! 👋 I'm your helpful assistant, here to answer your questions based on your department's documents, while respecting strict access policies.
 
-Your job is to ONLY answer questions using the context provided below. However, before answering, you MUST check if the user's role matches the role of the documents.
+Please note:
+- I will only answer using the information provided in the context.
+- If your question is a friendly greeting (like "hi", "hello", "how are you"), respond warmly without referencing documents.
+- If your question is about data and the documents belong to your department, answer truthfully based on the context.
+- If the documents belong to a different department, say:
+  "Access denied. You are not authorized to view information from another department."
+- If you're unsure or no matching information is found, respond with:
+  "I'm sorry, I couldn't find relevant information in your department's records."
+- Never make up information. Stick to what's provided.
 
 Context: {context}
 User Role: {role}
 Question: {question}
 
-Important Rules:
-1. If the documents in context belong to the same department as the user's role, answer the question truthfully based on the content.
-2. If the documents belong to a DIFFERENT department, you must respond:
-   "Access denied. You are not authorized to view information from another department."
-3. If you are unsure or the data is missing, say:
-   "I'm sorry, I couldn't find relevant information in your department's records."
-4. Do not make up any information. Always stay within the given context.
-
 Begin your answer:
 """
+
 
 def set_custom_template():
     return PromptTemplate(
@@ -101,20 +102,39 @@ def load_qa_chain():
     )
 
     def qa_with_retrieval(inputs):
-        question = inputs["question"]
+        question = inputs["question"].strip().lower()
         role = inputs["role"]
 
-        docs = db.as_retriever().invoke(question)
+        # 🌟 Friendly intent detection
+        greetings = ["hi", "hello", "hey", "how are you", "good morning", "good evening", "what's up"]
 
-        filtered_docs = [doc for doc in docs if doc.metadata.get("role") == role]
+        if any(greet in question for greet in greetings):
+            return {
+                "result": "👋 Hello! I'm here to help you with department-related questions. Please let me know what you’d like to know today!",
+                "source_documents": []
+            }
 
-        if not filtered_docs:
+        # ✅ Department-based filtering
+        retriever = db.as_retriever(search_kwargs={
+            "k": 10,
+            "filter": {"role": role}
+        })
+
+        try:
+            docs = retriever.invoke(question)
+        except Exception as e:
+            return {
+                "result": f"Failed to retrieve documents: {e}",
+                "source_documents": []
+            }
+
+        if not docs:
             return {
                 "result": "Access denied or no relevant documents found for your department.",
                 "source_documents": []
             }
 
-        context = "\n\n".join(doc.page_content for doc in filtered_docs)
+        context = "\n\n".join(doc.page_content for doc in docs)
 
         response = rag_pipeline.invoke({
             "context": context,
@@ -122,14 +142,13 @@ def load_qa_chain():
             "role": role
         })
 
-        return {"result": response, "source_documents": filtered_docs}
+        return {"result": response, "source_documents": docs}
 
-    return qa_with_retrieval  # ✅ IMPORTANT FIX
 
-# ------------------ Exported Object ------------------
+
+    return qa_with_retrieval  
 
 qa_chain = load_qa_chain()
-
 # ----------- Testing -------------
 
 if __name__ == "__main__":

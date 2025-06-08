@@ -132,24 +132,27 @@ else:
             )
 
     # Message form
+    # Handle 'clear' or 'logout' before form renders
+    if "input_msg" in st.session_state:
+        if st.session_state.input_msg.lower().strip() == "clear":
+            st.session_state.chat_history = []
+            save_chat_history(st.session_state.username, [])
+            st.session_state.input_msg = ""  # Reset input
+            st.success("Chat history cleared.")
+            st.rerun()
+        elif st.session_state.input_msg.lower().strip() == "logout":
+            logout()
+            st.rerun()
+    
+    # Chat input form
     with st.form(key="chat_form", clear_on_submit=True):
         msg = st.text_area("Your message", key="input_msg", height=100)
         send_button = st.form_submit_button("Send")
-
-        if msg.lower().strip() == "clear":
-            st.session_state.chat_history = []
-            save_chat_history(st.session_state.username, [])
-            st.success("Chat history cleared.")
-            st.rerun()
-        elif msg.lower().strip() == "logout":
-            logout()
-            st.rerun()
-
-        if send_button and msg.strip():
-            st.session_state.chat_history.append({"sender": "user", "message": msg})
-            reply = chat(msg)
-            if reply:
-                st.session_state.chat_history.append({"sender": "bot", "message": reply})
-                save_chat_history(st.session_state.username, st.session_state.chat_history)
-
-            st.rerun()
+    
+    if send_button and msg.strip():
+        st.session_state.chat_history.append({"sender": "user", "message": msg})
+        reply = chat(msg)
+        if reply:
+            st.session_state.chat_history.append({"sender": "bot", "message": reply})
+            save_chat_history(st.session_state.username, st.session_state.chat_history)
+        st.rerun()

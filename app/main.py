@@ -22,7 +22,6 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
-    
 app = FastAPI()
 security = HTTPBasic()
 SECRET_KEY = "super-secret-key"

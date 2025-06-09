@@ -33,6 +33,7 @@ for key in ["session_cookie", "is_logged_in", "login_trigger", "logout_trigger",
     if key not in st.session_state:
         st.session_state[key] = None if key in ["session_cookie", "user_role", "username"] else False
 
+
 # ==== Login ====
 def login(username, password):
     for key in list(st.session_state.keys()):
@@ -81,6 +82,7 @@ def chat(messages):
 if st.session_state.pending_rerun:
     st.session_state.pending_rerun = False
     st.rerun()
+
 
 # ==== UI ====
 st.title("FinSolve Technologies")
@@ -138,7 +140,11 @@ else:
 
         else:
             st.session_state.chat_messages.append({"role": "user", "content": user_input})
-            reply = chat(st.session_state.chat_messages)
+
+            # Show spinner while waiting for chat reply
+            with st.spinner("FinSolve Bot is typing..."):
+                reply = chat(st.session_state.chat_messages)
+
             if reply:
                 st.session_state.chat_messages.append({"role": "assistant", "content": reply})
                 save_chat_history(st.session_state.username, st.session_state.chat_messages)

@@ -51,7 +51,6 @@ class HuggingFaceChat(LLM):
         return "huggingface_chat"
 
 # ------------------ Prompt Template ------------------
-
 CUSTOM_PROMPT_TEMPLATE = """
 Hello! 👋 I'm your helpful assistant, here to answer your questions based on your department's documents, while respecting strict access policies.
 
@@ -59,6 +58,8 @@ Please follow these guidelines when responding:
 
 - If the user's input is a friendly greeting (e.g., "hi", "hello", "how are you"), respond warmly with a brief greeting message without referencing any documents.
 - If the question relates to the user's department and relevant documents are available, provide a clear and concise answer based only on the context provided.
+- If the user is from the HR department and asks about any employee, provide detailed information including but not limited to:
+  employee_id, full_name, role, department, email, location, date_of_birth, date_of_joining, manager_id, salary, leave_balance, leaves_taken, attendance_pct, performance_rating, last_review_date.
 - If the documents are from a different department, respond politely with:
   "🚫 Access Denied: You are not authorized to view information from another department."
 - If no relevant information is found or you are unsure, respond with:
@@ -81,6 +82,7 @@ Question: {question}
 
 Begin your answer:
 """
+
 
 
 def set_custom_template():
@@ -124,14 +126,14 @@ def load_qa_chain():
         question = inputs["question"].strip().lower()
         role = inputs["role"]
 
-        # ✅ Friendly and safe greeting detection
+        # Friendly and safe greeting detection
         if is_greeting(question):
             return {
                 "result": "👋 Hello! I'm here to help you with department-related questions. Ask me anything related to your department!",
                 "source_documents": []
             }
 
-        # ✅ Department-based filtering
+        # Department-based filtering
         retriever = db.as_retriever(search_kwargs={
             "k": 10,
             "filter": {"role": {"$in": [role, "general"]}}

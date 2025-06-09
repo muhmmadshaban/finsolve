@@ -5,22 +5,19 @@ import json
 import os
 
 BASE_URL = "http://127.0.0.1:8000"
-CHAT_DIR = "../resources/chat_logs"  # Directory for saving chat history
+CHAT_DIR = "../resources/chat_logs"  # Directory to store persistent chat logs
 
 
-# ==== Helper Functions for Persistent Chat Storage ====
+# ==== Helper Functions for Chat History ====
 def get_history_file(username):
     return os.path.join(CHAT_DIR, f"{username}.json")
 
 
 def load_chat_history(username):
-    try:
-        filepath = get_history_file(username)
-        if os.path.exists(filepath):
-            with open(filepath, "r") as f:
-                return json.load(f)
-    except Exception:
-        pass
+    filepath = get_history_file(username)
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            return json.load(f)
     return []
 
 
@@ -32,11 +29,11 @@ def save_chat_history(username, history):
 
 # ==== Session Initialization ====
 for key in ["session_cookie", "is_logged_in", "login_trigger", "logout_trigger",
-            "pending_rerun", "user_role", "username"]:
+            "pending_rerun", "user_role", "username", "chat_messages"]:
     if key not in st.session_state:
         st.session_state[key] = None if key in ["session_cookie", "user_role", "username"] else False
 
-# ==== Login Function ====
+# ==== Login ====
 def login(username, password):
     for key in list(st.session_state.keys()):
         del st.session_state[key]
@@ -50,20 +47,14 @@ def login(username, password):
 
     st.session_state.session_cookie = response.cookies.get("session")
     st.session_state.is_logged_in = True
-    st.session_state.login_trigger = True
-
-    data = response.json()
-    st.session_state.user_role = data.get("role")
     st.session_state.username = username
-
-    # ✅ Load user-specific chat history
-    st.session_state.chat_history = load_chat_history(username)
-
+    st.session_state.user_role = response.json().get("role")
+    st.session_state.chat_messages = load_chat_history(username)
     st.session_state.pending_rerun = True
     st.rerun()
 
 
-# ==== Logout Function ====
+# ==== Logout ====
 def logout():
     requests.post(f"{BASE_URL}/logout", cookies={"session": st.session_state.get("session_cookie")})
     for key in list(st.session_state.keys()):
@@ -71,12 +62,12 @@ def logout():
     st.rerun()
 
 
-# ==== Chat API Call ====
-def chat(message):
+# ==== Send Message ====
+def chat(messages):
     try:
         response = requests.post(
             f"{BASE_URL}/chat",
-            json={"query": message, "role": st.session_state.user_role},
+            json={"messages": messages, "role": st.session_state.user_role},
             cookies={"session": st.session_state.session_cookie}
         )
         response.raise_for_status()
@@ -86,12 +77,12 @@ def chat(message):
         return None
 
 
-# ==== Rerun Trigger ====
+# ==== Rerun trigger ====
 if st.session_state.pending_rerun:
     st.session_state.pending_rerun = False
     st.rerun()
 
-# ==== UI Rendering ====
+# ==== UI ====
 st.title("FinSolve Technologies")
 st.subheader("Internal chatbot with role-based access control")
 
@@ -99,7 +90,7 @@ if st.session_state.get("logout_trigger"):
     st.success("Logged out successfully.")
     st.session_state.logout_trigger = False
 
-# ==== Login Page ====
+# ==== Login UI ====
 if not st.session_state.is_logged_in:
     st.subheader("Login")
     username = st.text_input("Username")
@@ -107,7 +98,7 @@ if not st.session_state.is_logged_in:
     if st.button("Login"):
         login(username, password)
 
-# ==== Chat Page ====
+# ==== Chat UI ====
 else:
     st.markdown(f"👤 Logged in as: **{st.session_state.username}** ({st.session_state.user_role})")
     if st.button("Logout"):
@@ -115,44 +106,40 @@ else:
 
     st.subheader("Chat with FinSolve Bot")
 
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = load_chat_history(st.session_state.username)
+    if "chat_messages" not in st.session_state:
+        st.session_state.chat_messages = load_chat_history(st.session_state.username)
 
-    # Show chat history
-    for chat_entry in st.session_state.chat_history:
-        if chat_entry["sender"] == "user":
-            st.markdown(
-                f"<span style='color: blue; font-weight: 700;'>You:</span> {chat_entry['message']}",
-                unsafe_allow_html=True
-            )
-        else:
-            st.markdown(
-                f"<span style='color: green; font-weight: 700;'>🤖 FinSolve Bot:</span> {chat_entry['message']}",
-                unsafe_allow_html=True
-            )
+    # Display messages
+    for msg in st.session_state.chat_messages:
+        role = msg["role"]
+        if role == "user":
+            st.markdown(f"<span style='color: blue; font-weight: bold;'>You:</span> {msg['content']}", unsafe_allow_html=True)
+        elif role == "assistant":
+            st.markdown(f"<span style='color: green; font-weight: bold;'>🤖 FinSolve Bot:</span> {msg['content']}", unsafe_allow_html=True)
 
-    # Message form
-    # Handle 'clear' or 'logout' before form renders
-    if "input_msg" in st.session_state:
-        if st.session_state.input_msg.lower().strip() == "clear":
-            st.session_state.chat_history = []
+    # Message input
+    with st.form(key="chat_form", clear_on_submit=True):
+        user_input = st.text_area("Your message", key="user_input", height=100)
+        send_btn = st.form_submit_button("Send")
+
+    # Handle input
+    if send_btn and user_input.strip():
+        msg_lower = user_input.strip().lower()
+
+        if msg_lower == "clear":
+            st.session_state.chat_messages = []
             save_chat_history(st.session_state.username, [])
-            st.session_state.input_msg = ""  # Reset input
             st.success("Chat history cleared.")
             st.rerun()
-        elif st.session_state.input_msg.lower().strip() == "logout":
+
+        elif msg_lower == "logout":
             logout()
             st.rerun()
-    
-    # Chat input form
-    with st.form(key="chat_form", clear_on_submit=True):
-        msg = st.text_area("Your message", key="input_msg", height=100)
-        send_button = st.form_submit_button("Send")
-    
-    if send_button and msg.strip():
-        st.session_state.chat_history.append({"sender": "user", "message": msg})
-        reply = chat(msg)
-        if reply:
-            st.session_state.chat_history.append({"sender": "bot", "message": reply})
-            save_chat_history(st.session_state.username, st.session_state.chat_history)
-        st.rerun()
+
+        else:
+            st.session_state.chat_messages.append({"role": "user", "content": user_input})
+            reply = chat(st.session_state.chat_messages)
+            if reply:
+                st.session_state.chat_messages.append({"role": "assistant", "content": reply})
+                save_chat_history(st.session_state.username, st.session_state.chat_messages)
+            st.rerun()

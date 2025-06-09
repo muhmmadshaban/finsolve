@@ -8,20 +8,21 @@ from starlette.responses import JSONResponse
 from pydantic import BaseModel
 from services.llm import qa_chain  # Import the LLM chain from your service module
 
-# Simulated LLM service
-# class DummyQAChain:
-#     def invoke(self, input_data):
-#         return f"Echo: {input_data['query']} (Role: {input_data['role']})"
 
-# qa_chain = DummyQAChain()  # Replace with actual chain later
+
+from typing import List
+
+class Message(BaseModel):
+    role: str
+    content: str
 
 class ChatRequest(BaseModel):
-    query: str
+    messages: List[Message]
     role: str
 
 class ChatResponse(BaseModel):
     answer: str
-
+    
 app = FastAPI()
 security = HTTPBasic()
 SECRET_KEY = "super-secret-key"
@@ -63,20 +64,25 @@ def get_current_user(request: Request):
 @app.get("/test")
 def test(user: dict = Depends(get_current_user)):
     return {"message": f"Hello {user['username']}! You can now chat.", "role": user["role"]}
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(chat_req: ChatRequest, request: Request):
     session_cookie = request.cookies.get("session")
     if not session_cookie:
         raise HTTPException(status_code=401, detail="Session cookie missing")
 
-    input_data = {
-        "question": chat_req.query,  # ✅ FIXED: from `query` to `question`
-        "role": chat_req.role
-    }
-
     try:
-        results = qa_chain(input_data)  # ✅ Use qa_chain(...) directly if it's a function
-        return {"answer": results["result"]}
+        # You may choose to forward full messages or just last question
+        latest_user_msg = next((m.content for m in reversed(chat_req.messages) if m.role == "user"), "")
+        
+        input_data = {
+            "messages": [msg.dict() for msg in chat_req.messages],  # for full context
+            "question": latest_user_msg,
+            "role": chat_req.role
+        }
+
+        result = qa_chain(input_data)
+        return {"answer": result["result"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during QA processing: {e}")
 

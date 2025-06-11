@@ -5,6 +5,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from typing import Dict
 from itsdangerous import URLSafeSerializer
 from starlette.responses import JSONResponse
+from services.logger import log_interaction  # ⬅️ Import logging module
 from pydantic import BaseModel
 from services.llm import qa_chain  # Import the LLM chain from your service module
 
@@ -64,6 +65,7 @@ def get_current_user(request: Request):
 def test(user: dict = Depends(get_current_user)):
     return {"message": f"Hello {user['username']}! You can now chat.", "role": user["role"]}
 
+# --- Your endpoint ---
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(chat_req: ChatRequest, request: Request):
     session_cookie = request.cookies.get("session")
@@ -71,20 +73,30 @@ async def chat_endpoint(chat_req: ChatRequest, request: Request):
         raise HTTPException(status_code=401, detail="Session cookie missing")
 
     try:
-        # You may choose to forward full messages or just last question
+        data = serializer.loads(session_cookie)
+        username = data["username"]
+        role = data["role"]
+
+        # Latest message from user
         latest_user_msg = next((m.content for m in reversed(chat_req.messages) if m.role == "user"), "")
-        
+
         input_data = {
-            "messages": [msg.dict() for msg in chat_req.messages],  # for full context
+            "messages": [msg.dict() for msg in chat_req.messages],
             "question": latest_user_msg,
             "role": chat_req.role
         }
 
         result = qa_chain(input_data)
-        return {"answer": result["result"]}
+        answer = result["result"]
+        confidence = result.get("confidence", "N/A")
+
+        # ✅ Log the interaction
+        log_interaction(username, role, latest_user_msg, answer, confidence)
+
+        return {"answer": answer}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during QA processing: {e}")
-
 @app.post("/logout")
 def logout(response: Response):
     response.delete_cookie("session")

@@ -14,3 +14,4 @@ resources/vector_db_hf/
 .env
 
 resources/chat_logs/
+resources/logs/

@@ -1,23 +1,35 @@
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+
 import os
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_core.prompts import PromptTemplate
-from langchain_community.vectorstores import FAISS
-from langchain_core.language_models import LLM
-from langchain_core.callbacks import CallbackManagerForLLMRun
+
+import re
+import numpy as np
+from datetime import datetime
+from dotenv import load_dotenv
 from typing import Optional, List, Any
 from huggingface_hub import InferenceClient
-from dotenv import load_dotenv
 
+from langchain_core.language_models import LLM
+from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnableMap, RunnableSequence
+from langchain_community.vectorstores import FAISS
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_core.callbacks import CallbackManagerForLLMRun
+
+from services.logger import log_interaction  # adjust path if needed
+
+# Load environment variable
 load_dotenv()
 HF_TOKEN = os.environ.get("HF_TOKEN")
-
 if not HF_TOKEN:
     raise ValueError("HF_TOKEN environment variable not set.")
 
 hugging_face_repo = "google/gemma-2b-it"
 DB_FAISS_PATH = "../resources/vector_db_hf"
 
-# ------------------ LLM Wrapper ------------------
+# ----------- LLM Wrapper -----------
 
 class HuggingFaceChat(LLM):
     model: str
@@ -50,29 +62,45 @@ class HuggingFaceChat(LLM):
     def _llm_type(self) -> str:
         return "huggingface_chat"
 
-# ------------------ Prompt Template ------------------
+# ----------- Prompt Template -----------
+
 CUSTOM_PROMPT_TEMPLATE = """
-Hello! 👋 I'm your helpful assistant, here to answer your questions based on your department's documents, while respecting strict access policies.
+Hello! 👋 I'm your helpful assistant, here to answer your questions based on your department's data, while adhering to strict access policies and professional guidelines.
 
-Please follow these guidelines when responding:
+Please follow these rules while responding:
 
-- If the user's input is a friendly greeting (e.g., "hi", "hello", "how are you"), respond warmly with a brief greeting message without referencing any documents.
-- If the question relates to the user's department and relevant documents are available, provide a clear and concise answer based only on the context provided.
-- If the user is from the HR department and asks about any employee, provide detailed information including but not limited to:
-  employee_id, full_name, role, department, email, location, date_of_birth, date_of_joining, manager_id, salary, leave_balance, leaves_taken, attendance_pct, performance_rating, last_review_date.
-- If the documents are from a different department, respond politely with:
-  "🚫 Access Denied: You are not authorized to view information from another department."
-- If no relevant information is found or you are unsure, respond with:
-  "❓ I'm sorry, I couldn't find relevant information in your department's records."
-- Always avoid fabricating any information; rely strictly on the provided context.
+1. 🤝 **Friendly Greetings:**
+   - If the user's message is a friendly greeting (e.g., "hi", "hello", "how are you"), respond warmly and briefly.
+   - Do not mention documents or internal data.
 
-Please format your responses as follows:
+2. 🗂️ **Authorized Department Queries:**
+   - If the question relates to the user's department and relevant data is available, provide a clear and accurate answer based strictly on the context provided.
+   - Present the information as general organizational knowledge; **never refer to "documents", "files", or "records" explicitly.** For example, avoid phrases like "according to the documents..." or "the record shows...".
+
+3. 🔐 **Cross-Department Access Restriction:**
+   - If the user tries to access data from another department, politely reply with:
+     🚫 Access Denied: You are not authorized to view information from another department.
+
+4. 🧾 **HR Department Specific Rule:**
+   - If the user is from the HR department and inquires about an employee, return detailed information including the following fields:
+     - `employee_id`, `full_name`, `role`, `department`, `email`, `location`, `date_of_birth`, `date_of_joining`, `manager_id`, `salary`, `leave_balance`, `leaves_taken`, `attendance_pct`, `performance_rating`, `last_review_date`.
+   - Maintain professional and respectful tone at all times.
+
+5. ❓ **No Data or Unclear Case:**
+   - If no relevant information is found or you're unsure, respond with:
+     ❓ I'm sorry, I couldn't find relevant information in your department's records.
+   - Do not speculate or fabricate information.
+
+📌 **General Instructions:**
+- Do not mention the existence of documents or data files.
+- Keep answers concise, accurate, and professional.
+- Use clear formatting and maintain a helpful, respectful tone throughout.
 
 ---
 
 [Your answer here]
 
-*If applicable, you may include a polite closing line encouraging further questions.*
+*Feel free to ask if you have more questions — I'm here to help!*
 
 ---
 
@@ -83,19 +111,13 @@ Question: {question}
 Begin your answer:
 """
 
-
-
 def set_custom_template():
     return PromptTemplate(
         template=CUSTOM_PROMPT_TEMPLATE,
         input_variables=["context", "question", "role"]
     )
 
-# ------------------ Chain Loader ------------------
-
-from langchain_core.runnables import RunnableMap
-from langchain_core.runnables import RunnableSequence
-import re
+# ----------- Chain Loader -----------
 
 def is_greeting(question):
     greetings = [
@@ -125,15 +147,13 @@ def load_qa_chain():
     def qa_with_retrieval(inputs):
         question = inputs["question"].strip().lower()
         role = inputs["role"]
+        username = inputs.get("username", "anonymous")
 
-        # Friendly and safe greeting detection
         if is_greeting(question):
-            return {
-                "result": "👋 Hello! I'm here to help you with department-related questions. Ask me anything related to your department!",
-                "source_documents": []
-            }
+            response = "👋 Hello! I'm here to help you with department-related questions. Ask me anything related to your department!"
+            log_interaction(username, role, question, response, confidence="greeting")
+            return {"result": response, "source_documents": []}
 
-        # Department-based filtering
         retriever = db.as_retriever(search_kwargs={
             "k": 10,
             "filter": {"role": {"$in": [role, "general"]}}
@@ -142,18 +162,18 @@ def load_qa_chain():
         try:
             docs = retriever.invoke(question)
         except Exception as e:
-            return {
-                "result": f"❌ Failed to retrieve documents: {e}",
-                "source_documents": []
-            }
+            response = f"❌ Failed to retrieve documents: {e}"
+            log_interaction(username, role, question, response, confidence="error")
+            return {"result": response, "source_documents": []}
 
         if not docs:
-            return {
-                "result": "I'm sorry, I couldn't find relevant information in your department's records.",
-                "source_documents": []
-            }
+            response = "❓ I'm sorry, I couldn't find relevant information in your department's records."
+            log_interaction(username, role, question, response, confidence=0.0)
+            return {"result": response, "source_documents": []}
 
         context = "\n\n".join(doc.page_content for doc in docs)
+        similarities = [doc.metadata.get('score', 0.7) for doc in docs]
+        confidence = round(np.mean(similarities), 2) if similarities else 0.5
 
         response = rag_pipeline.invoke({
             "context": context,
@@ -161,21 +181,30 @@ def load_qa_chain():
             "role": role
         })
 
-        return {"result": response, "source_documents": docs}
+       
+
+        return {
+            "result": response,
+            "source_documents": docs,
+            "confidence": confidence
+        }
 
     return qa_with_retrieval
-# ----------- Testing -------------
-qa_chain= load_qa_chain()
+
+# ----------- Testing -----------
+
+qa_chain = load_qa_chain()
 
 if __name__ == "__main__":
     print("🔍 Testing LLM Setup")
     try:
-        qa_chain = load_qa_chain()
         response = qa_chain({
             "question": "What is financing in this company?",
-            "role": "engineering"
+            "role": "engineering",
+            "username": "Tony"
         })
         print("✅ Response:", response["result"])
         print("📄 Source:", response["source_documents"])
+        print("🔢 Confidence:", response["confidence"])
     except Exception as e:
         print("❌ Error during test:", str(e))

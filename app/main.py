@@ -3,11 +3,16 @@
 from fastapi import FastAPI, HTTPException, Depends, Request, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from typing import Dict
-from itsdangerous import URLSafeSerializer
+import os
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+
 from starlette.responses import JSONResponse
 from services.logger import log_interaction  # ⬅️ Import logging module
 from pydantic import BaseModel
 from services.llm import qa_chain  # Import the LLM chain from your service module
+from dotenv import load_dotenv
+load_dotenv()
+
 
 
 
@@ -25,8 +30,8 @@ class ChatResponse(BaseModel):
     answer: str
 app = FastAPI()
 security = HTTPBasic()
-SECRET_KEY = "super-secret-key"
-serializer = URLSafeSerializer(SECRET_KEY)
+SECRET_KEY = os.environ.get("SECRET_KEY")
+serializer = URLSafeTimedSerializer(SECRET_KEY)
 
 # Dummy database
 users_db: Dict[str, Dict[str, str]] = {
@@ -45,7 +50,7 @@ def login(response: Response, credentials: HTTPBasicCredentials = Depends(securi
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     session_token = serializer.dumps({"username": credentials.username, "role": user["role"]})
-    response.set_cookie(key="session", value=session_token, httponly=True)
+    response.set_cookie(key="session", value=session_token, httponly=True, secure=True)
     return {"message": f"Welcome {credentials.username}!", "role": user["role"]}
 
 # Auth dependency
@@ -55,9 +60,12 @@ def get_current_user(request: Request):
         raise HTTPException(status_code=401, detail="Session not found")
 
     try:
-        data = serializer.loads(session_token)
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid session")
+        # Expiration set to 1800 seconds (30 minutes)
+        data = serializer.loads(session_token, max_age=1800)
+    except SignatureExpired:
+        raise HTTPException(status_code=401, detail="Session expired. Please login again.")
+    except BadSignature:
+        raise HTTPException(status_code=401, detail="Invalid session token.")
 
     return data
 

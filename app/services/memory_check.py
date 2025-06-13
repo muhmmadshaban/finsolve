@@ -1,3 +1,5 @@
+# this file is only for testing pupose there is no use of this in the production....
+
 from langchain.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 

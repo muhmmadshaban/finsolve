@@ -1,3 +1,7 @@
+
+
+#this file is used to create a vector database from various markdown and CSV files, we can do same work by using admin panel in the frontend
+
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -35,9 +39,7 @@ all_docs += load_markdown_with_role("../../resources/data/marketing/marketing_re
 
 all_docs += load_csv_with_role("../../resources/data/hr/hr_data.csv", "hr")
 
-# all_docs += load_csv_with_role("../data/marketing_data.csv", "marketing")
-# all_docs += load_csv_with_role("../data/finance_data.csv", "finance")
-# all_docs += load_markdown_with_role("../data/hr_guide.md", "hr")
+
 
 # Split and embed
 chunked_docs = splitter.split_documents(all_docs)

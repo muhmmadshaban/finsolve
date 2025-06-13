@@ -1,9 +1,27 @@
 [project]
-name = "ds-rpc-01"
+name = "finsolve-chatbot"
 version = "0.1.0"
-description = "Starter project for the RPC-01: Internal Chatbot with Role Based Access Control"
+description = "FinSolve: Secure internal chatbot system with role-based access, vector search, and admin analytics"
 readme = "README.md"
 requires-python = ">=3.10"
+
 dependencies = [
-    "fastapi[standard]>=0.115.12",
+    "fastapi[standard]>=0.115.12",        # Core API backend
+    "uvicorn",                            # ASGI server for FastAPI
+    "streamlit",                          # Chat UI and Admin dashboard
+    "pandas",                             # Data analysis (logs, CSV)
+    "plotly",                             # Interactive analytics charts
+    "python-dotenv",                      # Load .env configs
+    "itsdangerous",                       # Secure token handling
+    "huggingface_hub",                    # For embedding model access
+    "langchain",                          # Framework for chaining LLM components
+    "langchain-community",                # FAISS, document loaders
+    "langchain-core",                     # Core LangChain abstractions
+    "langchain-huggingface",              # HuggingFace embedding integration
+    "markdown",                           # Parsing `.md` documents
+    "numpy",                              # Numerical utilities (fallback handling, etc.)
+    "requests",                           # HTTP API requests
+    "pydantic",                           # Request validation schemas
+    "starlette",                          # FastAPI base framework
+    "slowapi"                             # Rate limiting support
 ]

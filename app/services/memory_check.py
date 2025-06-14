@@ -4,7 +4,7 @@ from langchain.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 
 embedding = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-db = FAISS.load_local("../../resources/vector_db_hf", embedding, allow_dangerous_deserialization=True)
+db = FAISS.load_local("../schemas/vector_db_hf", embedding, allow_dangerous_deserialization=True)
 query = "How does the engineering team handle project documentation?"
 results = db.similarity_search(query, k=3)
 

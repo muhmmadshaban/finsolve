@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 import os
 
-LOG_PATH = "../resources/logs/chat_logs.csv"  # Update path as needed
+LOG_PATH = "schemas/logs/chat_logs.csv"  # Update path as needed
 
 def log_interaction(username, department, query, response, confidence):
     log_data = {

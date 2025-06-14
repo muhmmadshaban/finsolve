@@ -44,4 +44,4 @@ all_docs += load_csv_with_role("../../resources/data/hr/hr_data.csv", "hr")
 # Split and embed
 chunked_docs = splitter.split_documents(all_docs)
 vectorstore = FAISS.from_documents(chunked_docs, embedding)
-vectorstore.save_local("../../resources/vector_db_hf")
+vectorstore.save_local("../schemas/vector_db_hf")

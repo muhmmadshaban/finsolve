@@ -27,7 +27,7 @@ if not HF_TOKEN:
     raise ValueError("HF_TOKEN environment variable not set.")
 
 hugging_face_repo = "google/gemma-2b-it"
-DB_FAISS_PATH = "../resources/vector_db_hf"
+DB_FAISS_PATH = "schemas/vector_db_hf"
 
 # ----------- LLM Wrapper -----------
 

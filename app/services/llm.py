@@ -15,10 +15,11 @@ from langchain_core.language_models import LLM
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableMap, RunnableSequence
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
+
+from langchain.embeddings import HuggingFaceEmbeddings
 from langchain_core.callbacks import CallbackManagerForLLMRun
 
-from services.logger import log_interaction  # adjust path if needed
+from app.services.logger import log_interaction  # adjust path if needed
 
 # Load environment variable
 load_dotenv()
@@ -27,7 +28,7 @@ if not HF_TOKEN:
     raise ValueError("HF_TOKEN environment variable not set.")
 
 hugging_face_repo = "google/gemma-2b-it"
-DB_FAISS_PATH = "schemas/vector_db_hf"
+DB_FAISS_PATH = "app/schemas/vector_db_hf"
 
 # ----------- LLM Wrapper -----------
 
@@ -129,7 +130,7 @@ def is_greeting(question):
 
 def load_qa_chain():
     embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    db = FAISS.load_local(DB_FAISS_PATH, embedding_model, allow_dangerous_deserialization=True)
+    db = FAISS.load_local(DB_FAISS_PATH, embedding_model)
 
     llm = HuggingFaceChat(model=hugging_face_repo, token=HF_TOKEN)
     prompt = set_custom_template()

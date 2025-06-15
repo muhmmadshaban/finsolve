@@ -7,10 +7,15 @@ import os
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from starlette.responses import JSONResponse
-from services.logger import log_interaction  # ⬅️ Import logging module
+from app.services.logger import log_interaction  # ⬅️ Import logging module
 from pydantic import BaseModel
-from services.llm import qa_chain  # Import the LLM chain from your service module
+from app.services.llm import qa_chain  # Import the LLM chain from your service module
 from dotenv import load_dotenv
+from sqlalchemy.future import select
+import bcrypt
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.services.db import get_db
+from app.schemas.model import User
 load_dotenv()
 
 
@@ -34,25 +39,25 @@ SECRET_KEY = os.environ.get("SECRET_KEY")
 serializer = URLSafeTimedSerializer(SECRET_KEY)
 
 # Dummy database
-users_db: Dict[str, Dict[str, str]] = {
-    "Tony": {"password": "password123", "role": "engineering"},
-    "Bruce": {"password": "securepass", "role": "marketing"},
-    "Sam": {"password": "financepass", "role": "finance"},
-    "Peter": {"password": "pete123", "role": "engineering"},
-    "Sid": {"password": "sidpass123", "role": "marketing"},
-    "Natasha": {"password": "hrpass123", "role": "hr"},
-}
+
 
 @app.post("/login")
-def login(response: Response, credentials: HTTPBasicCredentials = Depends(security)):
-    user = users_db.get(credentials.username)
-    if not user or user["password"] != credentials.password:
+async def login(
+    response: Response,
+    credentials: HTTPBasicCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = select(User).where(User.username == credentials.username)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if not user or not bcrypt.checkpw(credentials.password.encode(), user.password.encode()):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    session_token = serializer.dumps({"username": credentials.username, "role": user["role"]})
+    session_token = serializer.dumps({"username": user.username, "role": user.role})
     response.set_cookie(key="session", value=session_token, httponly=True, secure=True)
-    return {"message": f"Welcome {credentials.username}!", "role": user["role"]}
-
+    
+    return {"message": f"Welcome {user.username}!", "role": user.role}
 # Auth dependency
 def get_current_user(request: Request):
     session_token = request.cookies.get("session")

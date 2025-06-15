@@ -1,10 +1,11 @@
-import asyncio
-from app.services.db import engine
-from app.schemas.models import Base
+# app/services/init_db.py
 
-async def init_db():
+import asyncio
+from app.schemas.model import Base
+from app.services.db import engine
+
+async def create_tables():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-if __name__ == "__main__":
-    asyncio.run(init_db())
+asyncio.run(create_tables())

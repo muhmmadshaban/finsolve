@@ -5,7 +5,7 @@ import json
 import os
 
 BASE_URL = "http://127.0.0.1:8000"
-CHAT_DIR = "../resources/chat_logs"  # Directory to store persistent chat logs
+CHAT_DIR = "app/schemas/chat_logs"  # Directory to store persistent chat logs
 
 
 # ==== Helper Functions for Chat History ====

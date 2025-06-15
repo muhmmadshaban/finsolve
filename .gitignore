@@ -10,8 +10,8 @@ wheels/
 .venv
 .idea/ 
 *.lock
-resources/vector_db_hf/
+app/schemas/vector_db_hf/
 .env
-
-resources/chat_logs/
-resources/logs/
+app/schemas/chat_logs/
+app/schemas/logs/
+users.db

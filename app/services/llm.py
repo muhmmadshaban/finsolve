@@ -16,10 +16,10 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableMap, RunnableSequence
 from langchain_community.vectorstores import FAISS
 
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.callbacks import CallbackManagerForLLMRun
 
-from app.services.logger import log_interaction  # adjust path if needed
+from app.services.logger import log_interaction  
 
 # Load environment variable
 load_dotenv()
@@ -49,15 +49,15 @@ class HuggingFaceChat(LLM):
         **kwargs: Any,
     ) -> str:
         try:
-            response = self.client.chat_completion(
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=1024,
-                stop=stop,
-                temperature=0.2
+            response = self.client.text_generation(
+                prompt=prompt,
+                max_new_tokens=1024,
+                temperature=0.2,
+                stop_sequences=stop or []
             )
-            return response.choices[0].message.content
+            return response
         except Exception as e:
-            raise ValueError(f"Error in chat_completion: {str(e)}")
+            raise ValueError(f"Error in text generation: {str(e)}")
 
     @property
     def _llm_type(self) -> str:
@@ -155,13 +155,10 @@ def load_qa_chain():
             log_interaction(username, role, question, response, confidence="greeting")
             return {"result": response, "source_documents": []}
 
-        retriever = db.as_retriever(search_kwargs={
-            "k": 10,
-            "filter": {"role": {"$in": [role, "general"]}}
-        })
-
         try:
-            docs = retriever.invoke(question)
+            raw_docs = db.similarity_search(question, k=30)
+            # Filter docs where role matches user's role or is "general"
+            docs = [doc for doc in raw_docs if doc.metadata.get("role") in (role, "general")][:10]
         except Exception as e:
             response = f"❌ Failed to retrieve documents: {e}"
             log_interaction(username, role, question, response, confidence="error")
@@ -182,7 +179,7 @@ def load_qa_chain():
             "role": role
         })
 
-       
+        log_interaction(username, role, question, response, confidence=confidence)
 
         return {
             "result": response,
@@ -191,7 +188,6 @@ def load_qa_chain():
         }
 
     return qa_with_retrieval
-
 # ----------- Testing -----------
 
 qa_chain = load_qa_chain()

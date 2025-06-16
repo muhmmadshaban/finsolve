@@ -33,7 +33,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
-app = FastAPI()
+app = FastAPI(debug=True)
 security = HTTPBasic()
 SECRET_KEY = os.environ.get("SECRET_KEY")
 serializer = URLSafeTimedSerializer(SECRET_KEY)
@@ -78,7 +78,8 @@ def get_current_user(request: Request):
 def test(user: dict = Depends(get_current_user)):
     return {"message": f"Hello {user['username']}! You can now chat.", "role": user["role"]}
 
-# --- Your endpoint ---
+
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(chat_req: ChatRequest, request: Request):
     session_cookie = request.cookies.get("session")
@@ -90,26 +91,30 @@ async def chat_endpoint(chat_req: ChatRequest, request: Request):
         username = data["username"]
         role = data["role"]
 
-        # Latest message from user
+        # Extract latest message from user
         latest_user_msg = next((m.content for m in reversed(chat_req.messages) if m.role == "user"), "")
 
         input_data = {
             "messages": [msg.dict() for msg in chat_req.messages],
             "question": latest_user_msg,
-            "role": chat_req.role
+            "role": chat_req.role,
+            "username": username
         }
 
         result = qa_chain(input_data)
         answer = result["result"]
         confidence = result.get("confidence", "N/A")
 
-        # ✅ Log the interaction
         log_interaction(username, role, latest_user_msg, answer, confidence)
 
         return {"answer": answer}
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error during QA processing: {e}")
+
+
 @app.post("/logout")
 def logout(response: Response):
     response.delete_cookie("session")

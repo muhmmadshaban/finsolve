@@ -12,21 +12,22 @@ from langchain_community.vectorstores import FAISS
 from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
-from langchain.embeddings import HuggingFaceEmbeddings
+# from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
+
 
 # Page Config
 st.set_page_config(page_title="📈 Finsolve Admin Dashboard", layout="wide")
 
 # Constants
-LOG_PATH = "schemas/logs/chat_logs.csv"
-VECTOR_DB_PATH = "schemas/vector_db_hf"
+LOG_PATH = "app/schemas/logs/chat_logs.csv"
+VECTOR_DB_PATH = "app/schemas/vector_db_hf"
 
 # Load environment
 load_dotenv()
 
 # Embedding Setup
-model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-model.to("cpu")
+
 embedding = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
 
@@ -34,7 +35,7 @@ splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
 if os.path.exists(f"{VECTOR_DB_PATH}/index.faiss"):
     vectorstore = FAISS.load_local(
         VECTOR_DB_PATH,
-        embeddings=embedding
+        embedding
     )
 else:
     vectorstore = None
@@ -264,3 +265,10 @@ if st.session_state.logged_in:
                         st.error(f"An error occurred: {e}")
                 else:
                     st.warning("⚠️ Please enter a username.")
+print("Number of documents in FAISS index:", vectorstore.index.ntotal)
+for doc in vectorstore.docstore._dict.values():
+    print(doc.metadata)
+
+
+
+

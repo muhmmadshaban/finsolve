@@ -1,28 +1,41 @@
-
 # === backend.py ===
 from fastapi import FastAPI, HTTPException, Depends, Request, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from typing import Dict
+from fastapi.middleware.cors import CORSMiddleware
+from typing import List, Dict
 import os
-from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
-
-from starlette.responses import JSONResponse
-from app.services.logger import log_interaction  # ⬅️ Import logging module
-from pydantic import BaseModel
-from app.services.llm import qa_chain  # Import the LLM chain from your service module
-from dotenv import load_dotenv
-from sqlalchemy.future import select
 import bcrypt
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from pydantic import BaseModel
+from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.services.db import get_db
-from app.schemas.model import User
+from starlette.responses import JSONResponse
+
+from dotenv import load_dotenv
 load_dotenv()
 
+# Custom services
+from app.services.logger import log_interaction
+from app.services.llm import qa_chain
+from app.services.db import get_db
+from app.schemas.model import User
 
+# FastAPI setup
+app = FastAPI(debug=True)
+security = HTTPBasic()
+SECRET_KEY = os.environ.get("SECRET_KEY", "your_default_dev_key")
+serializer = URLSafeTimedSerializer(SECRET_KEY)
 
+# CORS middleware (optional, for frontend access)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Adjust in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-from typing import List
-
+# Request/Response schemas
 class Message(BaseModel):
     role: str
     content: str
@@ -33,14 +46,8 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
-app = FastAPI(debug=True)
-security = HTTPBasic()
-SECRET_KEY = os.environ.get("SECRET_KEY")
-serializer = URLSafeTimedSerializer(SECRET_KEY)
 
-# Dummy database
-
-
+# === Auth ===
 @app.post("/login")
 async def login(
     response: Response,
@@ -57,28 +64,31 @@ async def login(
     session_token = serializer.dumps({"username": user.username, "role": user.role})
     response.set_cookie(key="session", value=session_token, httponly=True, secure=True)
     
-    return {"message": f"Welcome {user.username}!", "role": user.role}
-# Auth dependency
+    return {
+        "message": f"Welcome {user.username}!",
+        "username": user.username,
+        "role": user.role
+    }
+
 def get_current_user(request: Request):
     session_token = request.cookies.get("session")
     if not session_token:
         raise HTTPException(status_code=401, detail="Session not found")
 
     try:
-        # Expiration set to 1800 seconds (30 minutes)
-        data = serializer.loads(session_token, max_age=1800)
+        return serializer.loads(session_token, max_age=1800)
     except SignatureExpired:
         raise HTTPException(status_code=401, detail="Session expired. Please login again.")
     except BadSignature:
         raise HTTPException(status_code=401, detail="Invalid session token.")
 
-    return data
+@app.get("/whoami")
+def whoami(user: dict = Depends(get_current_user)):
+    return {"username": user["username"], "role": user["role"]}
 
 @app.get("/test")
 def test(user: dict = Depends(get_current_user)):
     return {"message": f"Hello {user['username']}! You can now chat.", "role": user["role"]}
-
-
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(chat_req: ChatRequest, request: Request):
@@ -91,13 +101,12 @@ async def chat_endpoint(chat_req: ChatRequest, request: Request):
         username = data["username"]
         role = data["role"]
 
-        # Extract latest message from user
         latest_user_msg = next((m.content for m in reversed(chat_req.messages) if m.role == "user"), "")
 
         input_data = {
             "messages": [msg.dict() for msg in chat_req.messages],
             "question": latest_user_msg,
-            "role": chat_req.role,
+            "role": role,
             "username": username
         }
 
@@ -114,8 +123,7 @@ async def chat_endpoint(chat_req: ChatRequest, request: Request):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error during QA processing: {e}")
 
-
 @app.post("/logout")
 def logout(response: Response):
     response.delete_cookie("session")
-    return JSONResponse(content={"message ": "Logged out successfully."})
+    return JSONResponse(content={"message": "Logged out successfully."})

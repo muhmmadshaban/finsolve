@@ -26,8 +26,8 @@ load_dotenv()
 HF_TOKEN = os.environ.get("HF_TOKEN")
 if not HF_TOKEN:
     raise ValueError("HF_TOKEN environment variable not set.")
-
-hugging_face_repo = "google/gemma-2b-it"
+# model="HuggingFaceH4/zephyr-7b-beta"
+hugging_face_repo = "HuggingFaceH4/zephyr-7b-beta"
 DB_FAISS_PATH = "app/schemas/vector_db_hf"
 
 # ----------- LLM Wrapper -----------
@@ -66,56 +66,55 @@ class HuggingFaceChat(LLM):
 # ----------- Prompt Template -----------
 
 CUSTOM_PROMPT_TEMPLATE = """
-Hello! 👋 I'm your helpful assistant, here to answer your questions based on your department's data, while adhering to strict access policies and professional guidelines.
+Hello! 👋 I'm your helpful assistant, here to answer questions strictly based on your department’s verified context.
 
-Please follow these rules while responding:
-
-1. 🤝 **Friendly Greetings:**
-   - If the user's message is a friendly greeting (e.g., "hi", "hello", "how are you"), respond warmly and briefly.
-   - Do not mention documents or internal data.
-
-2. 🗂️ **Authorized Department Queries:**
-   - If the question relates to the user's department and relevant data is available, provide a clear and accurate answer based strictly on the context provided.
-   - Present the information as general organizational knowledge; **never refer to "documents", "files", or "records" explicitly.** For example, avoid phrases like "according to the documents..." or "the record shows...".
-
-3. 🔐 **Cross-Department Access Restriction:**
-   - If the user tries to access data from another department, politely reply with:
-     🚫 Access Denied: You are not authorized to view information from another department.
-
-4. 🧾 **HR Department Specific Rule:**
-   - If the user is from the HR department and inquires about an employee, return detailed information including the following fields:
-     - `employee_id`, `full_name`, `role`, `department`, `email`, `location`, `date_of_birth`, `date_of_joining`, `manager_id`, `salary`, `leave_balance`, `leaves_taken`, `attendance_pct`, `performance_rating`, `last_review_date`.
-   - Maintain professional and respectful tone at all times.
-
-5. ❓ **No Data or Unclear Case:**
-   - If no relevant information is found or you're unsure, respond with:
-     ❓ I'm sorry, I couldn't find relevant information in your department's records.
-   - Do not speculate or fabricate information.
-
-📌 **General Instructions:**
-- Do not mention the existence of documents or data files.
-- Keep answers concise, accurate, and professional.
-- Use clear formatting and maintain a helpful, respectful tone throughout.
+📌 General Rules:
+- Do **NOT** mention or refer to any documents, files, context sources, or "provided information".
+- Do **NOT** say things like: "in the context", "as per the document", "the document mentions", or "provided above".
+- Just state the relevant information as if you know it directly.
+- Never invent or assume answers. If something is not found in the context, respond accordingly.
 
 ---
 
-[Your answer here]
+🔧 Department-Specific Rules:
 
-*Feel free to ask if you have more questions — I'm here to help!*
+- 🧾 **HR Department**:
+  - Include employee info if asked, using fields like: `employee_id`, `full_name`, `role`, `department`, `email`, `location`, etc.
+  - Maintain professionalism and empathy.
+
+- 💰 **Finance Department**:
+  - Keep answers factual and number-focused. Include values, dates, and amounts when relevant.
+  - Do **not** speculate on financial strategy or policy beyond provided data.
+
+- 🛠️ **Engineering Department**:
+  - Focus on technical accuracy. Use concise definitions for processes, systems, or tools.
+  - Avoid explanations outside the context or speculative features.
+
+- 🏢 **General or Other Departments**:
+  - Keep the tone formal and helpful.
+  - Only use language and data found in context.
 
 ---
 
-Context: {context}  
-User Role: {role}  
-Question: {question}
+Context:
+{context}
 
-Begin your answer:
+User Details:
+- Name: {username}
+- Role: {role}
+
+Question:
+{question}
+
+---
+
+🎯 Your answer (short, clear, and based strictly on the context above):
 """
 
 def set_custom_template():
     return PromptTemplate(
         template=CUSTOM_PROMPT_TEMPLATE,
-        input_variables=["context", "question", "role"]
+        input_variables=["context", "question", "role","username"],
     )
 
 # ----------- Chain Loader -----------
@@ -140,6 +139,7 @@ def load_qa_chain():
             "context": lambda x: x["context"],
             "question": lambda x: x["question"],
             "role": lambda x: x["role"],
+            "username": lambda x: x["username"], 
         }
         | prompt
         | llm
@@ -157,7 +157,6 @@ def load_qa_chain():
 
         try:
             raw_docs = db.similarity_search(question, k=30)
-            # Filter docs where role matches user's role or is "general"
             docs = [doc for doc in raw_docs if doc.metadata.get("role") in (role, "general")][:10]
         except Exception as e:
             response = f"❌ Failed to retrieve documents: {e}"
@@ -170,13 +169,19 @@ def load_qa_chain():
             return {"result": response, "source_documents": []}
 
         context = "\n\n".join(doc.page_content for doc in docs)
+
+        # Inject username only if question implies identity/name
+        if re.search(r"\b(my name|who am i|what.*my name)\b", question):
+            context = f"Username: {username}\n\n" + context
+
         similarities = [doc.metadata.get('score', 0.7) for doc in docs]
         confidence = round(np.mean(similarities), 2) if similarities else 0.5
 
         response = rag_pipeline.invoke({
             "context": context,
             "question": question,
-            "role": role
+            "role": role,
+            "username": username 
         })
 
         log_interaction(username, role, question, response, confidence=confidence)
@@ -188,6 +193,8 @@ def load_qa_chain():
         }
 
     return qa_with_retrieval
+
+
 # ----------- Testing -----------
 
 qa_chain = load_qa_chain()

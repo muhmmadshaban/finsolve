@@ -1,8 +1,11 @@
 # === backend.py ===
 from fastapi import FastAPI, HTTPException, Depends, Request, Response
+from fastapi import Request, Cookie
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict
+from typing import Optional
+
 import os
 import bcrypt
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
@@ -15,6 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Custom services
+from fastapi.responses import JSONResponse
 from app.services.logger import log_interaction
 from app.services.llm import qa_chain
 from app.services.db import get_db
@@ -48,6 +52,13 @@ class ChatResponse(BaseModel):
     answer: str
 
 # === Auth ===
+
+
+
+@app.get("/validate")
+def validate(session: str = Cookie(None)):
+    from app.main import get_current_user
+    return get_current_user 
 @app.post("/login")
 async def login(
     response: Response,
@@ -59,13 +70,16 @@ async def login(
     user = result.scalar_one_or_none()
 
     if not user or not bcrypt.checkpw(credentials.password.encode(), user.password.encode()):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        return JSONResponse(
+            status_code=401,
+            content={"message": "❌ Invalid username or password. Please try again."}
+        )
 
     session_token = serializer.dumps({"username": user.username, "role": user.role})
     response.set_cookie(key="session", value=session_token, httponly=True, secure=True)
     
     return {
-        "message": f"Welcome {user.username}!",
+        "message": f"✅ Welcome {user.username}!",
         "username": user.username,
         "role": user.role
     }

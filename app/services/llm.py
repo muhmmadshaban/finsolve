@@ -52,7 +52,7 @@ class HuggingFaceChat(LLM):
             response = self.client.text_generation(
                 prompt=prompt,
                 max_new_tokens=1024,
-                temperature=0.2,
+                temperature=0.1,
                 stop_sequences=stop or []
             )
             return response
@@ -72,31 +72,15 @@ Hello! 👋 I'm your helpful assistant, here to answer questions strictly based 
 - Do **NOT** mention or refer to any documents, files, context sources, or "provided information".
 - Do **NOT** say things like: "in the context", "as per the document", "the document mentions", or "provided above".
 - Just state the relevant information as if you know it directly.
-- Never invent or assume answers. If something is not found in the context, respond accordingly.
-
----
-
-🔧 Department-Specific Rules:
-
-- 🧾 **HR Department**:
-  - Include employee info if asked, using fields like: `employee_id`, `full_name`, `role`, `department`, `email`, `location`, etc.
-  - Maintain professionalism and empathy.
-
-- 💰 **Finance Department**:
-  - Keep answers factual and number-focused. Include values, dates, and amounts when relevant.
-  - Do **not** speculate on financial strategy or policy beyond provided data.
-
-- 🛠️ **Engineering Department**:
-  - Focus on technical accuracy. Use concise definitions for processes, systems, or tools.
-  - Avoid explanations outside the context or speculative features.
-
-- 🏢 **General or Other Departments**:
-  - Keep the tone formal and helpful.
-  - Only use language and data found in context.
+- Do **NOT** use any external knowledge or assumptions.
+- If the answer is not found directly in the context, say: “I'm sorry, I couldn’t find relevant information.”
+- Keep responses brief, clear, and based **only** on the provided context.
 
 ---
 
 Context:
+Here is all the information from internal records:
+
 {context}
 
 User Details:

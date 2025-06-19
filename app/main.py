@@ -76,7 +76,13 @@ async def login(
         )
 
     session_token = serializer.dumps({"username": user.username, "role": user.role})
-    response.set_cookie(key="session", value=session_token, httponly=True, secure=True)
+    response.set_cookie(
+    key="session",
+    value=session_token,
+    httponly=True,
+    samesite="lax",  # Important
+    secure=False     # MUST be False on localhost (True only in production over HTTPS)
+)
     
     return {
         "message": f"✅ Welcome {user.username}!",

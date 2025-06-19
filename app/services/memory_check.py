@@ -1,7 +1,7 @@
 # this file is only for testing pupose there is no use of this in the production....
 
 from langchain.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 embedding = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 db = FAISS.load_local("../schemas/vector_db_hf", embedding, allow_dangerous_deserialization=True)

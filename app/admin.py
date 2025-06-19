@@ -61,6 +61,9 @@ if st.session_state.logged_in:
     nav_options = ["📊 Analytics Dashboard", "🛡️ Document Upload", "👤 User Management"]
 
     page = st.sidebar.radio("Navigate", nav_options)
+    if st.sidebar.button("🚪 Logout"):
+        st.session_state.logged_in = False
+        st.rerun()
     if page == "📊 Analytics Dashboard":
         if not os.path.exists(LOG_PATH):
             st.info("📭 No data available. Log file not found.")

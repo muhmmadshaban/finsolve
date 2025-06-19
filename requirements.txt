@@ -1,36 +1,31 @@
-# Core Web Frameworks
-fastapi==0.110.0
-uvicorn[standard]==0.29.0
-httpx==0.27.0
-starlette==0.36.3
+# Core libraries
+streamlit
+pandas
+requests
+plotly
+markdown
+python-dotenv
+bcrypt
+itsdangerous
+sqlalchemy[asyncio]
+asyncio
 
+# FastAPI & related
+fastapi
+uvicorn
+starlette
 
-# Security
-itsdangerous==2.1.2
-python-dotenv==1.0.1
+# LangChain and Embeddings
+langchain
+langchain-community
+sentence-transformers
+faiss-cpu  # FAISS for CPU version
 
-# Authentication
-fastapi-security==0.5.0
+# Streamlit Extensions
+streamlit-javascript
 
-# Data Handling
-pandas==2.2.2
-numpy==1.26.4
+# Pydantic for models
+pydantic
 
-# Embeddings and LLMs
-langchain==0.2.0
-langchain-community==0.2.0
-langchain-core==0.2.0
-langchain-huggingface==0.2.0
-huggingface-hub==0.23.1
-sentence-transformers==2.6.1
-
-# Vector DB
-faiss-cpu==1.7.4
-
-# Visualization
-plotly==5.22.0
-streamlit==1.35.0
-markdown==3.6
-
-torch==2.2.2
-
+# Optional: If you're using HuggingFace Transformers directly
+transformers

@@ -7,22 +7,29 @@ FinSolve is a secure, role-based internal chatbot and analytics platform tailore
 ## 🚀 Features
 
 ### ✅ User Module
-- 🔐 **Role-based Login** (Engineering/HR/Finance/etc.)
-- 💬 **Streamlit-based Chat Interface**
-- 📁 **Chat History Storage** per user
-- 🧠 **Contextual Q&A** from department-specific documents
-- 🗑️ "Clear" to reset chat history
+
+- 🔐 **Role-Based Login** (Engineering, HR, Finance, etc.)
+- 💬 **Streamlit Chat Interface** for interactive conversations
+- 🧠 **Context-Aware Q&A** from department-tagged documents
+- 📁 **Chat History per User**
+- 🧹 **Clear Chat** to reset conversation context
 
 ### ✅ Admin Module
-- 📈 **Analytics Dashboard**: Query stats, confidence levels, department usage
-- 📤 **Secure Document Upload**: `.csv` or `.md` with department tagging
-- 🔄 **Live Vector DB Updates** with FAISS + HuggingFace embeddings
 
-### ✅ Security
+- 📊 **Analytics Dashboard**: Queries, confidence levels, usage insights
+- 📂 **Document Upload**: `.csv` or `.md` files with department tags
+- 🔄 **Live FAISS Vector DB Update** using Hugging Face Embeddings
+- 👥 **User Management**
+
+- - ➕ **Create New Users**: Admins can add users with department roles and secure credentials.
+
+- - ❌ **Delete Users:** Remove users from the system, revoking access and clearing associated data.
+
+### ✅ Security & Access
+
 - 🍪 **Secure Cookie Handling** (`secure=True`, `httponly=True`)
-- ⏱️ **Token Expiry** with `itsdangerous.TimestampSigner`
-- 🧑‍💼 **Admin login with .env credentials**
-
+- ⏳ **Token-Based Session Auth** with `itsdangerous.TimestampSigner`
+- 🔑 **Admin Login** secured via `.env` environment variables
 
 ---
 
@@ -62,7 +69,7 @@ HF_TOKEN="Hugging Face token here"
 
 4. **Run Backend**
 ```bash
-uvicorn app/backend.main:app --host 0.0.0.0 --port 8000 --workers 4
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
 5. **Run Frontend**

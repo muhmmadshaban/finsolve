@@ -1,9 +1,5 @@
 import logging
-
-logging.basicConfig(level=logging.DEBUG)
-
 import os
-
 import re
 import numpy as np
 from datetime import datetime
@@ -13,22 +9,20 @@ from huggingface_hub import InferenceClient
 
 from langchain_core.language_models import LLM
 from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import RunnableMap, RunnableSequence
+from langchain_core.runnables import RunnableMap
 from langchain_community.vectorstores import FAISS
-
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.callbacks import CallbackManagerForLLMRun
 
-from app.services.logger import log_interaction  
+from app.services.logger import log_interaction
 
 # Load environment variable
 load_dotenv()
 HF_TOKEN = os.environ.get("HF_TOKEN")
 if not HF_TOKEN:
     raise ValueError("HF_TOKEN environment variable not set.")
-# model="HuggingFaceH4/zephyr-7b-beta"
+
 hugging_face_repo = "HuggingFaceH4/zephyr-7b-beta"
-# hugging_face_repo = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 DB_FAISS_PATH = "app/schemas/vector_db_hf"
 
 # ----------- LLM Wrapper -----------
@@ -64,9 +58,123 @@ class HuggingFaceChat(LLM):
     def _llm_type(self) -> str:
         return "huggingface_chat"
 
-# ----------- Prompt Template -----------
+# ----------- Department-Specific Prompt Templates -----------
 
-CUSTOM_PROMPT_TEMPLATE = """
+ENGINEERING_PROMPT_TEMPLATE = """
+You are a specialized assistant for the Engineering Department. Use only the internal technical documentation provided in the context.
+
+✅ Do:
+- Only use provided technical architecture, engineering standards, and compliance references.
+- Keep answers clear and professional.
+- Mention technologies, models, or frameworks **only** if mentioned in the context.
+
+❌ Do NOT:
+- Refer to "context", "documents", or any source file.
+- Invent or assume processes or technical features.
+- Add generic info about AI, DevOps, or CI/CD unless in the context.
+
+---
+
+Context:
+{context}
+
+User Info:
+- Name: {username}
+- Role: {role}
+
+Question:
+{question}
+
+---
+
+🎯 Answer (based strictly on above context):
+"""
+
+FINANCE_PROMPT_TEMPLATE = """
+You are a financial data assistant helping the Finance Department analyze quarterly data and trends.
+
+✅ Do:
+- Use only the provided financial figures and metrics.
+- Stick to internal terminology like cash flow, gross margin, risk, etc.
+
+❌ Do NOT:
+- Reference "provided data", "context", or make assumptions.
+- Add stock market/general finance explanations.
+
+---
+
+Context:
+{context}
+
+User Info:
+- Name: {username}
+- Role: {role}
+
+Question:
+{question}
+
+---
+
+📊 Answer (based strictly on internal financial records):
+"""
+
+HR_PROMPT_TEMPLATE = """
+You're an assistant for the HR Department. Respond using only internal HR records and company policies.
+
+✅ Do:
+- Stick to employee records, leave policies, benefits, and performance data.
+- Keep responses short, respectful, and policy-aligned.
+
+❌ Do NOT:
+- Use generic HR advice or best practices.
+- Mention "documents", "context", or unverified info.
+
+---
+
+Context:
+{context}
+
+User Info:
+- Name: {username}
+- Role: {role}
+
+Question:
+{question}
+
+---
+
+🧾 Answer (strictly from verified HR data):
+"""
+
+MARKETING_PROMPT_TEMPLATE = """
+You assist the Marketing Department in analyzing campaign performance and strategy planning.
+
+✅ Do:
+- Only use data related to campaigns, ROI, customer retention, or projections.
+- Be clear, concise, and insightful.
+
+❌ Do NOT:
+- Mention "document", "context", or provide general marketing advice.
+- Assume outcomes or external market performance.
+
+---
+
+Context:
+{context}
+
+User Info:
+- Name: {username}
+- Role: {role}
+
+Question:
+{question}
+
+---
+
+📈 Answer (strictly based on internal marketing records):
+"""
+
+DEFAULT_PROMPT_TEMPLATE = """
 Hello! 👋 I'm your helpful assistant, here to answer questions strictly based on your department’s verified context.
 
 📌 General Rules:
@@ -80,11 +188,9 @@ Hello! 👋 I'm your helpful assistant, here to answer questions strictly based 
 ---
 
 Context:
-Here is all the information from internal records:
-
 {context}
 
-User Details:
+User Info:
 - Name: {username}
 - Role: {role}
 
@@ -96,10 +202,19 @@ Question:
 🎯 Your answer (short, clear, and based strictly on the context above):
 """
 
-def set_custom_template():
+# ----------- Prompt Selector -----------
+
+def get_prompt_by_role(role: str) -> PromptTemplate:
+    role_prompts = {
+        "engineering": ENGINEERING_PROMPT_TEMPLATE,
+        "finance": FINANCE_PROMPT_TEMPLATE,
+        "hr": HR_PROMPT_TEMPLATE,
+        "marketing": MARKETING_PROMPT_TEMPLATE
+    }
+    template = role_prompts.get(role.lower(), DEFAULT_PROMPT_TEMPLATE)
     return PromptTemplate(
-        template=CUSTOM_PROMPT_TEMPLATE,
-        input_variables=["context", "question", "role","username"],
+        template=template,
+        input_variables=["context", "question", "role", "username"]
     )
 
 # ----------- Chain Loader -----------
@@ -117,18 +232,6 @@ def load_qa_chain():
     db = FAISS.load_local(DB_FAISS_PATH, embedding_model)
 
     llm = HuggingFaceChat(model=hugging_face_repo, token=HF_TOKEN)
-    prompt = set_custom_template()
-
-    rag_pipeline = (
-        {
-            "context": lambda x: x["context"],
-            "question": lambda x: x["question"],
-            "role": lambda x: x["role"],
-            "username": lambda x: x["username"], 
-        }
-        | prompt
-        | llm
-    )
 
     def qa_with_retrieval(inputs):
         question = inputs["question"].strip().lower()
@@ -154,19 +257,29 @@ def load_qa_chain():
             return {"result": response, "source_documents": []}
 
         context = "\n\n".join(doc.page_content for doc in docs)
-
-        # Inject username only if question implies identity/name
         if re.search(r"\b(my name|who am i|what.*my name)\b", question):
             context = f"Username: {username}\n\n" + context
 
         similarities = [doc.metadata.get('score', 0.7) for doc in docs]
         confidence = round(np.mean(similarities), 2) if similarities else 0.5
 
+        prompt = get_prompt_by_role(role)
+        rag_pipeline = (
+            {
+                "context": lambda x: x["context"],
+                "question": lambda x: x["question"],
+                "role": lambda x: x["role"],
+                "username": lambda x: x["username"],
+            }
+            | prompt
+            | llm
+        )
+
         response = rag_pipeline.invoke({
             "context": context,
             "question": question,
             "role": role,
-            "username": username 
+            "username": username
         })
 
         log_interaction(username, role, question, response, confidence=confidence)
@@ -179,7 +292,6 @@ def load_qa_chain():
 
     return qa_with_retrieval
 
-
 # ----------- Testing -----------
 
 qa_chain = load_qa_chain()
@@ -188,7 +300,7 @@ if __name__ == "__main__":
     print("🔍 Testing LLM Setup")
     try:
         response = qa_chain({
-            "question": "What is financing in this company?",
+            "question": "What is our DevOps standard?",
             "role": "engineering",
             "username": "Tony"
         })

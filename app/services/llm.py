@@ -28,6 +28,7 @@ if not HF_TOKEN:
     raise ValueError("HF_TOKEN environment variable not set.")
 # model="HuggingFaceH4/zephyr-7b-beta"
 hugging_face_repo = "HuggingFaceH4/zephyr-7b-beta"
+# hugging_face_repo = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 DB_FAISS_PATH = "app/schemas/vector_db_hf"
 
 # ----------- LLM Wrapper -----------

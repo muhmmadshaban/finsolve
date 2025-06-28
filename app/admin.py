@@ -184,12 +184,20 @@ if st.session_state.logged_in:
                         content = file.read().decode("utf-8")
                         if file.name.endswith(".md"):
                             html_content = markdown.markdown(content)
-                            new_docs.append(Document(page_content=html_content, metadata={"role": department}))
+                            new_docs.append(Document(page_content=html_content, metadata={"role": department, "source": file.name}))
+
                         elif file.name.endswith(".csv"):
+                            file.seek(0)  # reset file pointer
+                            content = file.read().decode("utf-8")
+                            if not content.strip():
+                                st.warning(f"⚠️ The file '{file.name}' is empty and was skipped.")
+                                continue  # skip this file
+                            file.seek(0)
                             df = pd.read_csv(file)
                             for _, row in df.iterrows():
                                 row_text = " | ".join([f"{col}: {row[col]}" for col in df.columns])
-                                new_docs.append(Document(page_content=row_text, metadata={"role": department}))
+                                new_docs.append(Document(page_content=row_text, metadata={"role": department, "source": file.name}))
+
 
                     chunked_docs = splitter.split_documents(new_docs)
                     if vectorstore is not None:
@@ -268,9 +276,8 @@ if st.session_state.logged_in:
                         st.error(f"An error occurred: {e}")
                 else:
                     st.warning("⚠️ Please enter a username.")
-print("Number of documents in FAISS index:", vectorstore.index.ntotal)
-for doc in vectorstore.docstore._dict.values():
-    print(doc.metadata)
+# print("Number of documents in FAISS index:", vectorstore.index.ntotal)
+
 
 
 

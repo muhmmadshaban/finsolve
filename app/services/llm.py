@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import textwrap
 import numpy as np
 from datetime import datetime
 from dotenv import load_dotenv
@@ -16,7 +17,7 @@ from langchain_core.callbacks import CallbackManagerForLLMRun
 
 from app.services.logger import log_interaction
 
-# Load environment variable
+# Load environment variables
 load_dotenv()
 HF_TOKEN = os.environ.get("HF_TOKEN")
 if not HF_TOKEN:
@@ -58,7 +59,7 @@ class HuggingFaceChat(LLM):
     def _llm_type(self) -> str:
         return "huggingface_chat"
 
-# ----------- Department-Specific Prompt Templates -----------
+# ----------- Prompt Templates -----------
 
 ENGINEERING_PROMPT_TEMPLATE = """
 You are a specialized assistant for the Engineering Department. Use only the internal technical documentation provided in the context.
@@ -74,19 +75,15 @@ You are a specialized assistant for the Engineering Department. Use only the int
 - Add generic info about AI, DevOps, or CI/CD unless in the context.
 
 ---
-
-Context:
-{context}
+Context: {context}
 
 User Info:
 - Name: {username}
 - Role: {role}
 
-Question:
-{question}
+Question: {question}
 
 ---
-
 🎯 Answer (based strictly on above context):
 """
 
@@ -102,50 +99,46 @@ You are a financial data assistant helping the Finance Department analyze quarte
 - Add stock market/general finance explanations.
 
 ---
-
-Context:
-{context}
+Context: {context}
 
 User Info:
 - Name: {username}
 - Role: {role}
 
-Question:
-{question}
+Question: {question}
 
 ---
-
 📊 Answer (based strictly on internal financial records):
 """
-
 HR_PROMPT_TEMPLATE = """
-You're an assistant for the HR Department. Respond using only internal HR records and company policies.
+You are FinSolve Bot, the official HR assistant for FinTechCo. You must respond using only verified internal employee data, strictly from the HR dataset.
 
 ✅ Do:
-- Stick to employee records, leave policies, benefits, and performance data.
-- Keep responses short, respectful, and policy-aligned.
+- Provide exact **numbers**, **lists**, or **facts** when the question asks for totals, performance, leaves, etc.
+- Use **bullet points** or **tables** for clarity.
+- Focus on **only what's asked** — no introductions, no explanations, no summaries.
 
 ❌ Do NOT:
-- Use generic HR advice or best practices.
-- Mention "documents", "context", or unverified info.
+- Provide generic HR advice or assumptions.
+- Mention files, documents, “based on data”, or anything outside the loaded dataset.
+- Add greetings, opinions, or commentary.
 
 ---
-
-Context:
+📂 Data Context:
 {context}
 
-User Info:
+👤 User Info:
 - Name: {username}
 - Role: {role}
 
-Question:
+❓ Question:
 {question}
 
 ---
-
-🧾 Answer (strictly from verified HR data):
+🧾 Answer (only from verified HR data, with exact numbers if applicable):
 """
 
+    
 MARKETING_PROMPT_TEMPLATE = """
 You assist the Marketing Department in analyzing campaign performance and strategy planning.
 
@@ -158,19 +151,15 @@ You assist the Marketing Department in analyzing campaign performance and strate
 - Assume outcomes or external market performance.
 
 ---
-
-Context:
-{context}
+Context: {context}
 
 User Info:
 - Name: {username}
 - Role: {role}
 
-Question:
-{question}
+Question: {question}
 
 ---
-
 📈 Answer (strictly based on internal marketing records):
 """
 
@@ -186,20 +175,17 @@ Hello! 👋 I'm your helpful assistant, here to answer questions strictly based 
 - Keep responses brief, clear, and based **only** on the provided context.
 
 ---
-
-Context:
-{context}
+Context: {context}
 
 User Info:
 - Name: {username}
 - Role: {role}
 
-Question:
-{question}
+Question: {question}
 
 ---
+🎯 Your answer (structured in readable paragraphs, based strictly on the context above):
 
-🎯 Your answer (short, clear, and based strictly on the context above):
 """
 
 # ----------- Prompt Selector -----------
@@ -217,7 +203,7 @@ def get_prompt_by_role(role: str) -> PromptTemplate:
         input_variables=["context", "question", "role", "username"]
     )
 
-# ----------- Chain Loader -----------
+# ----------- Greeting Matcher -----------
 
 def is_greeting(question):
     greetings = [
@@ -225,7 +211,9 @@ def is_greeting(question):
         r"\bgood morning\b", r"\bgood evening\b", r"\bwhat's up\b",
         r"\bhowdy\b", r"\bgreetings\b", r"\byo\b"
     ]
-    return any(re.search(pattern, question) for pattern in greetings)
+    return any(re.search(pattern, question.lower()) for pattern in greetings)
+
+# ----------- Load QA Chain -----------
 
 def load_qa_chain():
     embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
@@ -256,7 +244,8 @@ def load_qa_chain():
             log_interaction(username, role, question, response, confidence=0.0)
             return {"result": response, "source_documents": []}
 
-        context = "\n\n".join(doc.page_content for doc in docs)
+        # Clean and format context
+        context = "\n\n".join(doc.page_content.strip().replace("\n", " ") for doc in docs)
         if re.search(r"\b(my name|who am i|what.*my name)\b", question):
             context = f"Username: {username}\n\n" + context
 
@@ -275,12 +264,25 @@ def load_qa_chain():
             | llm
         )
 
+        # Generate response
         response = rag_pipeline.invoke({
             "context": context,
             "question": question,
             "role": role,
             "username": username
         })
+
+        # Extract and deduplicate max 2 sources
+        sources = []
+        for doc in docs:
+            source = doc.metadata.get("source")
+            if source and source not in sources:
+                sources.append(source)
+            if len(sources) >= 2:
+                break
+
+        if sources:
+            response += "\n\n📚 **Sources:**\n" + "\n".join(f"- `{src}`" for src in sources)
 
         log_interaction(username, role, question, response, confidence=confidence)
 
@@ -292,20 +294,22 @@ def load_qa_chain():
 
     return qa_with_retrieval
 
-# ----------- Testing -----------
+# ----------- Export Chain -----------
 
 qa_chain = load_qa_chain()
+
+# ----------- Test Run -----------
 
 if __name__ == "__main__":
     print("🔍 Testing LLM Setup")
     try:
-        response = qa_chain({
-            "question": "What is our DevOps standard?",
+        result = qa_chain({
+            "question": "What are the DevOps tools we use?",
             "role": "engineering",
             "username": "Tony"
         })
-        print("✅ Response:", response["result"])
-        print("📄 Source:", response["source_documents"])
-        print("🔢 Confidence:", response["confidence"])
+        print("✅ Response:", result["result"])
+        print("📄 Source Docs:", result["source_documents"])
+        print("📊 Confidence:", result["confidence"])
     except Exception as e:
         print("❌ Error during test:", str(e))

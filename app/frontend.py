@@ -17,33 +17,17 @@ browser_cookie = st_javascript("document.cookie")
 if browser_cookie and "session=" in browser_cookie and not st.session_state["session_cookie"]:
     session_val = browser_cookie.split("session=")[-1].split(";")[0]
     st.session_state["session_cookie"] = session_val
+
+# Helper functions
+def get_history_file(username):
+    return os.path.join(CHAT_DIR, f"{username}.json")
+
 def load_chat_history(username):
     path = get_history_file(username)
     if os.path.exists(path):
         with open(path, "r") as f:
             return json.load(f)
     return []
-# 🔐 Try to validate session with whoami
-if not st.session_state["is_logged_in"] and st.session_state["session_cookie"]:
-    try:
-        whoami_resp = requests.get(
-            f"{BASE_URL}/whoami", cookies={"session": st.session_state["session_cookie"]}
-        )
-        if whoami_resp.status_code == 200:
-            user_data = whoami_resp.json()
-            st.session_state["is_logged_in"] = True
-            st.session_state["username"] = user_data.get("username")
-            st.session_state["user_role"] = user_data.get("role")
-            st.session_state["chat_messages"] = load_chat_history(st.session_state["username"])
-    except:
-        st.session_state["session_cookie"] = None
-        st.session_state["is_logged_in"] = False
-
-# Helper functions
-def get_history_file(username):
-    return os.path.join(CHAT_DIR, f"{username}.json")
-
-
 
 def save_chat_history(username, messages):
     os.makedirs(CHAT_DIR, exist_ok=True)
@@ -64,7 +48,6 @@ def login(username, password):
         st.session_state["user_role"] = resp.json().get("role")
         st.session_state["chat_messages"] = load_chat_history(st.session_state["username"])
 
-        # Set cookie in browser
         st_javascript(f"document.cookie = 'session={session_cookie}; path=/';")
         return True
     except Exception as e:
@@ -89,11 +72,26 @@ def chat_request(messages):
             cookies={"session": st.session_state["session_cookie"]}
         )
         resp.raise_for_status()
-        return resp.json().get("answer")
+        return resp.json()  # full response including answer + sources
     except Exception as e:
         st.error(f"Chat error: {e}")
         return None
 
+# === Session Validation ===
+if not st.session_state["is_logged_in"] and st.session_state["session_cookie"]:
+    try:
+        whoami_resp = requests.get(
+            f"{BASE_URL}/whoami", cookies={"session": st.session_state["session_cookie"]}
+        )
+        if whoami_resp.status_code == 200:
+            user_data = whoami_resp.json()
+            st.session_state["is_logged_in"] = True
+            st.session_state["username"] = user_data.get("username")
+            st.session_state["user_role"] = user_data.get("role")
+            st.session_state["chat_messages"] = load_chat_history(st.session_state["username"])
+    except:
+        st.session_state["session_cookie"] = None
+        st.session_state["is_logged_in"] = False
 # ==== UI ====
 st.title("FinSolve Technologies")
 st.subheader("Internal role-based chatbot")
@@ -121,20 +119,49 @@ else:
             st.experimental_rerun()
 
     st.subheader("Chat")
+
     if st.session_state["chat_messages"] is None:
         st.session_state["chat_messages"] = []
 
     for msg in st.session_state["chat_messages"]:
         prefix = "You:" if msg["role"] == "user" else "🤖 FinSolve Bot:"
         color = "blue" if msg["role"] == "user" else "green"
-        st.markdown(f"<span style='color:{color}; font-weight:bold;'>{prefix}</span> {msg['content']}", unsafe_allow_html=True)
+
+        st.markdown(
+            f"**{prefix}**  \n{msg['content']}",
+            unsafe_allow_html=False
+        )
+
+        # Show sources (once, max 2, de-duplicated)
+        if msg["role"] == "assistant" and "sources" in msg:
+            unique_sources = list(dict.fromkeys(msg["sources"]))[:2]
+            if unique_sources:
+                st.markdown("📚 **Sources:**")
+                for src in unique_sources:
+                    st.markdown(f"- `{src}`")
 
     user_input = st.text_area("Your message", height=100)
     if st.button("Send") and user_input.strip():
         st.session_state["chat_messages"].append({"role": "user", "content": user_input})
+
         with st.spinner("FinSolve Bot is typing..."):
             reply = chat_request(st.session_state["chat_messages"])
+
         if reply:
-            st.session_state["chat_messages"].append({"role": "assistant", "content": reply})
+            message_data = {
+                "role": "assistant",
+                "content": reply.get("answer", "No response.")
+            }
+
+            # Attach sources if present
+            if "source_documents" in reply:
+                message_data["sources"] = list({
+                    doc.metadata.get("source")
+                    for doc in reply["source_documents"]
+                    if doc.metadata.get("source")
+                })[:2]  # Max 2 sources
+
+            st.session_state["chat_messages"].append(message_data)
             save_chat_history(st.session_state["username"], st.session_state["chat_messages"])
+
         st.experimental_rerun()

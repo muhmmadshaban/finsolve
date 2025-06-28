@@ -50,6 +50,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
+    sources: Optional[List[str]] = []
 
 # === Auth ===
 
@@ -131,18 +132,23 @@ async def chat_endpoint(chat_req: ChatRequest, request: Request):
         }
 
         result = qa_chain(input_data)
-        answer = result["result"]
+        answer = str(result.get("result", "No response.")).strip()
         confidence = result.get("confidence", "N/A")
 
         log_interaction(username, role, latest_user_msg, answer, confidence)
 
-        return {"answer": answer}
+        return {
+    "answer": answer,
+    "sources": [doc.metadata.get("source", "N/A") for doc in result.get("source_documents", [])]
+}
+
 
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error during QA processing: {e}")
-
+    
+# logout endpoint
 @app.post("/logout")
 def logout(response: Response):
     response.delete_cookie("session")

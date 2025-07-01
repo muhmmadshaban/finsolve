@@ -15,3 +15,4 @@ app/schemas/vector_db_hf/
 app/schemas/chat_logs/
 app/schemas/logs/
 users.db
+users.db

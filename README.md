@@ -59,7 +59,7 @@ pip install -r requirements.txt
 ```
 
 3. **Set Environment Variables**
-Create a `.env` file:
+Create a `.env` file and make sure you have access to the HuggingFaceH4/zephyr-7b-beta on the hugging face:
 ```ini
 ADMIN_ID=admin
 ADMIN_PASSWORD=admin
@@ -67,17 +67,25 @@ SECRET_KEY=your_secret_here
 HF_TOKEN="Hugging Face token here"
 ```
 
-4. **Run Backend**
+4. **Create User Database**
 ```bash
+
+python -m app.services.init_db
+```
+
+
+5. **Run Backend**
+```bash
+
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
-5. **Run Frontend**
+6. **Run Frontend**
 ```bash
 streamlit run app/frontend.py
 ```
 
-6. **Run Admin Dashboard**
+7. **Run Admin Dashboard**
 ```bash
 streamlit run app/admin.py
 ```
@@ -122,6 +130,3 @@ streamlit run app/admin.py
 
 ---
 
-## 📜 License
-
-MIT License
